@@ -19,7 +19,12 @@ export default function Login() {
       loginUser({ access: data.access, refresh: data.refresh }, data.user)
       navigate(data.user.is_staff ? '/admin/dashboard' : '/dashboard')
     } catch (err) {
-      setError(err.response?.data?.detail || 'Invalid credentials.')
+      if (!err.response) {
+        setError(`Network error — cannot reach server. (${err.message})`)
+      } else {
+        const data = err.response.data
+        setError(data?.detail || data?.non_field_errors?.[0] || JSON.stringify(data) || `Error ${err.response.status}`)
+      }
     } finally {
       setLoading(false)
     }
