@@ -1,7 +1,14 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getBatchCollect, submitBatchPayment, reorderLoans } from '../api/agent'
 import { useAuth } from '../context/AuthContext'
+import {
+  DndContext, closestCenter, PointerSensor, TouchSensor, useSensor, useSensors
+} from '@dnd-kit/core'
+import {
+  arrayMove, SortableContext, useSortable, verticalListSortingStrategy
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 
 const STORE_KEY = (agentId) => `mf_collect_${agentId}_${new Date().toISOString().slice(0, 10)}`
 
@@ -21,13 +28,14 @@ export default function BatchCollect() {
 
   // Route order mode
   const [routeMode, setRouteMode] = useState(false)
-  const [routeLoans, setRouteLoans] = useState([])   // working copy while editing
+  const [routeLoans, setRouteLoans] = useState([])
   const [orderDirty, setOrderDirty] = useState(false)
   const [savingOrder, setSavingOrder] = useState(false)
 
-  // Drag-and-drop refs
-  const dragIdx = useRef(null)
-  const dragOverIdx = useRef(null)
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 5 } })
+  )
 
   useEffect(() => {
     getBatchCollect().then(res => {
@@ -118,34 +126,15 @@ export default function BatchCollect() {
     setOrderDirty(false)
   }
 
-  const moveUp = (idx) => {
-    if (idx === 0) return
-    const arr = [...routeLoans]
-    ;[arr[idx - 1], arr[idx]] = [arr[idx], arr[idx - 1]]
-    setRouteLoans(arr)
+  const handleDragEnd = ({ active, over }) => {
+    if (!over || active.id === over.id) return
+    setRouteLoans(prev => {
+      const oldIdx = prev.findIndex(l => l.id === active.id)
+      const newIdx = prev.findIndex(l => l.id === over.id)
+      return arrayMove(prev, oldIdx, newIdx)
+    })
     setOrderDirty(true)
   }
-
-  const moveDown = (idx) => {
-    if (idx === routeLoans.length - 1) return
-    const arr = [...routeLoans]
-    ;[arr[idx], arr[idx + 1]] = [arr[idx + 1], arr[idx]]
-    setRouteLoans(arr)
-    setOrderDirty(true)
-  }
-
-  // Drag handlers
-  const onDragStart = (idx) => { dragIdx.current = idx }
-  const onDragEnter = (idx) => {
-    if (dragIdx.current === null || dragIdx.current === idx) return
-    const arr = [...routeLoans]
-    const dragged = arr.splice(dragIdx.current, 1)[0]
-    arr.splice(idx, 0, dragged)
-    dragIdx.current = idx
-    setRouteLoans(arr)
-    setOrderDirty(true)
-  }
-  const onDragEnd = () => { dragIdx.current = null; dragOverIdx.current = null }
 
   const saveOrder = async () => {
     setSavingOrder(true)
@@ -172,50 +161,18 @@ export default function BatchCollect() {
         <div className="d-flex justify-content-between align-items-center mb-3">
           <div>
             <h4 className="mb-0">Edit Route Order</h4>
-            <small className="text-muted">Drag or use arrows to arrange merchants</small>
+            <small className="text-muted">Hold and drag the ⠿ handle to reorder</small>
           </div>
           <button className="btn btn-sm btn-outline-secondary" onClick={cancelRouteMode}>Cancel</button>
         </div>
 
-        {routeLoans.map((loan, idx) => (
-          <div
-            key={loan.id}
-            className="card mb-2 border"
-            draggable
-            onDragStart={() => onDragStart(idx)}
-            onDragEnter={() => onDragEnter(idx)}
-            onDragEnd={onDragEnd}
-            onDragOver={e => e.preventDefault()}
-            style={{ cursor: 'grab', opacity: dragIdx.current === idx ? 0.5 : 1 }}
-          >
-            <div className="card-body py-2 px-3">
-              <div className="d-flex align-items-center gap-2">
-                <span className="text-muted fw-bold" style={{ minWidth: 24, textAlign: 'center' }}>
-                  {idx + 1}
-                </span>
-                <span className="text-muted me-1" style={{ fontSize: '1.2rem', cursor: 'grab' }}>⠿</span>
-                <div className="flex-grow-1">
-                  <div className="fw-bold">{loan.customer_name}</div>
-                  <div className="text-muted small">{loan.customer_phone}</div>
-                </div>
-                <div className="d-flex flex-column gap-1">
-                  <button
-                    className="btn btn-sm btn-outline-secondary py-0"
-                    style={{ lineHeight: 1.2 }}
-                    onClick={() => moveUp(idx)}
-                    disabled={idx === 0}
-                  >▲</button>
-                  <button
-                    className="btn btn-sm btn-outline-secondary py-0"
-                    style={{ lineHeight: 1.2 }}
-                    onClick={() => moveDown(idx)}
-                    disabled={idx === routeLoans.length - 1}
-                  >▼</button>
-                </div>
-              </div>
-            </div>
-          </div>
-        ))}
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+          <SortableContext items={routeLoans.map(l => l.id)} strategy={verticalListSortingStrategy}>
+            {routeLoans.map((loan, idx) => (
+              <SortableRouteItem key={loan.id} loan={loan} idx={idx} />
+            ))}
+          </SortableContext>
+        </DndContext>
 
         <div className="fixed-bottom bg-white border-top shadow-sm px-3 py-2">
           <div className="container d-flex justify-content-between align-items-center">
@@ -329,6 +286,43 @@ export default function BatchCollect() {
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+function SortableRouteItem({ loan, idx }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: loan.id })
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={{
+        transform: CSS.Transform.toString(transform),
+        transition,
+        opacity: isDragging ? 0.4 : 1,
+        zIndex: isDragging ? 999 : 'auto',
+      }}
+      className="card mb-2 border"
+    >
+      <div className="card-body py-2 px-3">
+        <div className="d-flex align-items-center gap-2">
+          <span className="text-muted fw-bold" style={{ minWidth: 24, textAlign: 'center' }}>
+            {idx + 1}
+          </span>
+          <span
+            className="text-muted me-1"
+            style={{ fontSize: '1.4rem', cursor: 'grab', touchAction: 'none', lineHeight: 1, userSelect: 'none' }}
+            {...attributes}
+            {...listeners}
+          >
+            ⠿
+          </span>
+          <div className="flex-grow-1">
+            <div className="fw-bold">{loan.customer_name}</div>
+            <div className="text-muted small">{loan.customer_phone}</div>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }
