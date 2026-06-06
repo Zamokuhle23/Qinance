@@ -62,8 +62,3 @@ body {
   overflow-x: auto;
 }
 
-@media (max-width: 767px) {
-  .loan-table thead { display: none; }
-  .loan-table tbody td { display: block; width: 100%; }
-  .loan-table tbody tr { margin-bottom: 12px; display: block; border-radius: 8px; }
-}
