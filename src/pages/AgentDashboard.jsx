@@ -313,7 +313,7 @@ export default function AgentDashboard() {
           />
           {filterDue(due_loans).length > 0 ? (
             <div className="table-responsive scrollable-table">
-              <table className="table table-bordered loan-table">
+              <table className="table table-bordered loan-table" style={{ minWidth: 700 }}>
                 <thead className="table-light">
                   <tr>
                     <th>Customer</th>
@@ -379,7 +379,7 @@ export default function AgentDashboard() {
             <div className="mt-3">
               {loans_paid.length > 0 ? (
                 <div className="table-responsive scrollable-table">
-                  <table className="table table-bordered loan-table">
+                  <table className="table table-bordered loan-table" style={{ minWidth: 750 }}>
                     <thead className="table-light">
                       <tr>
                         <th>Customer</th>
