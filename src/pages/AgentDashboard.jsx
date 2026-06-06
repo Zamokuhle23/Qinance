@@ -312,16 +312,16 @@ export default function AgentDashboard() {
             onChange={e => setSearch(e.target.value)}
           />
           {filterDue(due_loans).length > 0 ? (
-            <div className="table-responsive scrollable-table">
-              <table className="table table-bordered loan-table" style={{ minWidth: 700 }}>
+            <div className="table-responsive">
+              <table className="table table-bordered loan-table">
                 <thead className="table-light">
                   <tr>
                     <th>Customer</th>
-                    <th>Loan</th>
-                    <th>Daily</th>
+                    <th className="d-none d-md-table-cell">Loan</th>
+                    <th className="d-none d-md-table-cell">Daily</th>
                     <th>Remaining</th>
-                    <th>Days Left</th>
-                    <th>Status</th>
+                    <th className="d-none d-md-table-cell">Days Left</th>
+                    <th className="d-none d-md-table-cell">Status</th>
                     <th className="text-center">Action</th>
                   </tr>
                 </thead>
@@ -334,24 +334,23 @@ export default function AgentDashboard() {
                         </Link><br />
                         <small className="text-muted">{loan.customer_phone}</small>
                       </td>
-                      <td>{parseFloat(loan.principal_amount).toFixed(2)} SZL</td>
-                      <td>{parseFloat(loan.daily_payment).toFixed(2)} SZL</td>
+                      <td className="d-none d-md-table-cell">{parseFloat(loan.principal_amount).toFixed(2)} SZL</td>
+                      <td className="d-none d-md-table-cell">{parseFloat(loan.daily_payment).toFixed(2)} SZL</td>
                       <td>{parseFloat(loan.remaining_balance).toFixed(2)} SZL</td>
-                      <td><DaysLeftBadge days={loan.days_remaining} /></td>
-                      <td><StatusBadge color={loan.payment_status_color} /></td>
-                      <td className="text-center">
-                        <div className="d-flex flex-column align-items-center gap-1">
+                      <td className="d-none d-md-table-cell"><DaysLeftBadge days={loan.days_remaining} /></td>
+                      <td className="d-none d-md-table-cell"><StatusBadge color={loan.payment_status_color} /></td>
+                      <td>
+                        <div className="d-flex align-items-center gap-1">
                           <input
                             type="number"
                             step="0.01"
                             min="0"
                             className="form-control form-control-sm text-center"
-                            placeholder="Enter amount (optional)"
-                            style={{ maxWidth: 130 }}
+                            style={{ width: 80 }}
                             value={payAmounts[loan.id] ?? loan.daily_payment}
                             onChange={e => setPayAmounts(a => ({ ...a, [loan.id]: e.target.value }))}
                           />
-                          <button className="btn btn-sm btn-success w-100" onClick={() => handleMark(loan)}>
+                          <button className="btn btn-sm btn-success text-nowrap" onClick={() => handleMark(loan)}>
                             Mark Paid
                           </button>
                         </div>
@@ -378,17 +377,17 @@ export default function AgentDashboard() {
           {paidOpen && (
             <div className="mt-3">
               {loans_paid.length > 0 ? (
-                <div className="table-responsive scrollable-table">
-                  <table className="table table-bordered loan-table" style={{ minWidth: 750 }}>
+                <div className="table-responsive">
+                  <table className="table table-bordered loan-table">
                     <thead className="table-light">
                       <tr>
                         <th>Customer</th>
-                        <th>Loan</th>
-                        <th>Daily</th>
-                        <th>Paid Today</th>
+                        <th className="d-none d-md-table-cell">Loan</th>
+                        <th className="d-none d-md-table-cell">Daily</th>
+                        <th className="d-none d-md-table-cell">Paid Today</th>
                         <th>Remaining</th>
-                        <th>Days Left</th>
-                        <th>Status</th>
+                        <th className="d-none d-md-table-cell">Days Left</th>
+                        <th className="d-none d-md-table-cell">Status</th>
                         <th className="text-center">Action</th>
                       </tr>
                     </thead>
@@ -401,15 +400,15 @@ export default function AgentDashboard() {
                             </Link><br />
                             <small className="text-muted">{loan.customer_phone}</small>
                           </td>
-                          <td>{parseFloat(loan.principal_amount).toFixed(2)} SZL</td>
-                          <td>{parseFloat(loan.daily_payment).toFixed(2)} SZL</td>
-                          <td>{parseFloat(loan.amount_paid_today).toFixed(2)} SZL</td>
+                          <td className="d-none d-md-table-cell">{parseFloat(loan.principal_amount).toFixed(2)} SZL</td>
+                          <td className="d-none d-md-table-cell">{parseFloat(loan.daily_payment).toFixed(2)} SZL</td>
+                          <td className="d-none d-md-table-cell">{parseFloat(loan.amount_paid_today).toFixed(2)} SZL</td>
                           <td>{parseFloat(loan.remaining_balance).toFixed(2)} SZL</td>
-                          <td><DaysLeftBadge days={loan.days_remaining} /></td>
-                          <td><StatusBadge color={loan.payment_status_color} /></td>
-                          <td className="text-center">
+                          <td className="d-none d-md-table-cell"><DaysLeftBadge days={loan.days_remaining} /></td>
+                          <td className="d-none d-md-table-cell"><StatusBadge color={loan.payment_status_color} /></td>
+                          <td>
                             <div className="d-flex flex-column gap-1">
-                              <div className="d-flex gap-1">
+                              <div className="d-flex align-items-center gap-1">
                                 <input
                                   type="number"
                                   step="0.01"
@@ -419,7 +418,7 @@ export default function AgentDashboard() {
                                   value={payAmounts[loan.id] ?? loan.daily_payment}
                                   onChange={e => setPayAmounts(a => ({ ...a, [loan.id]: e.target.value }))}
                                 />
-                                <button className="btn btn-sm btn-success" onClick={() => handleMark(loan)}>
+                                <button className="btn btn-sm btn-success text-nowrap" onClick={() => handleMark(loan)}>
                                   Mark Paid
                                 </button>
                               </div>
