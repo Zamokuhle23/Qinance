@@ -16,6 +16,7 @@ export const getCustomerHistory = (customerId, loanId) => {
   return client.get(url)
 }
 export const getBatchCollect = () => client.get('/batch-collect/')
+export const reorderLoans = (order) => client.post('/loans/reorder/', order)
 export const submitBatchPayment = (payments) => client.post('/batch-payment/', { payments })
 export const calcLoan = (data) => client.post('/loan-calculator/', data)
 export const sendToAdmin = (amount) => client.post('/send-to-admin/', { amount })

@@ -1,15 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { getBatchCollect, submitBatchPayment } from '../api/agent'
+import { getBatchCollect, submitBatchPayment, reorderLoans } from '../api/agent'
 import { useAuth } from '../context/AuthContext'
 
 const STORE_KEY = (agentId) => `mf_collect_${agentId}_${new Date().toISOString().slice(0, 10)}`
-
-function badge(loan) {
-  if (loan.days_remaining <= 0) return '<span class="badge bg-danger">Overdue</span>'
-  if (loan.days_remaining <= 5) return `<span class="badge bg-warning text-dark">${loan.days_remaining}d left</span>`
-  return `<span class="badge bg-secondary">${loan.days_remaining}d left</span>`
-}
 
 export default function BatchCollect() {
   const { user } = useAuth()
@@ -24,6 +18,16 @@ export default function BatchCollect() {
   const [result, setResult] = useState(null)
   const [submitting, setSubmitting] = useState(false)
   const [restored, setRestored] = useState(false)
+
+  // Route order mode
+  const [routeMode, setRouteMode] = useState(false)
+  const [routeLoans, setRouteLoans] = useState([])   // working copy while editing
+  const [orderDirty, setOrderDirty] = useState(false)
+  const [savingOrder, setSavingOrder] = useState(false)
+
+  // Drag-and-drop refs
+  const dragIdx = useRef(null)
+  const dragOverIdx = useRef(null)
 
   useEffect(() => {
     getBatchCollect().then(res => {
@@ -50,18 +54,9 @@ export default function BatchCollect() {
   }, [selOrder, amounts])
 
   const isSelected = (id) => selOrder.includes(id)
-
-  const selectLoan = (id) => {
-    if (!isSelected(id)) setSelOrder(prev => [...prev, id])
-  }
-
-  const deselectLoan = (id) => {
-    setSelOrder(prev => prev.filter(x => x !== id))
-  }
-
-  const toggleLoan = (id) => {
-    isSelected(id) ? deselectLoan(id) : selectLoan(id)
-  }
+  const selectLoan = (id) => { if (!isSelected(id)) setSelOrder(p => [...p, id]) }
+  const deselectLoan = (id) => setSelOrder(p => p.filter(x => x !== id))
+  const toggleLoan = (id) => isSelected(id) ? deselectLoan(id) : selectLoan(id)
 
   const getTotal = () =>
     selOrder.reduce((s, id) => {
@@ -69,10 +64,7 @@ export default function BatchCollect() {
       return s + (isNaN(v) ? 0 : v)
     }, 0)
 
-  const handleAmountChange = (id, val) => {
-    setAmounts(a => ({ ...a, [id]: val }))
-  }
-
+  const handleAmountChange = (id, val) => setAmounts(a => ({ ...a, [id]: val }))
   const handleAmountBlur = (id, val) => {
     const v = parseFloat(val)
     if (!isNaN(v) && v > 0 && !isSelected(id)) selectLoan(id)
@@ -83,9 +75,6 @@ export default function BatchCollect() {
     const q = search.toLowerCase()
     return l.customer_name.toLowerCase().includes(q) || l.customer_phone.includes(q)
   }
-
-  const selLoans = selOrder.map(id => allLoans.find(l => l.id === id)).filter(Boolean).filter(matches)
-  const remLoans = allLoans.filter(l => !isSelected(l.id)).filter(matches)
 
   const handleSubmit = async () => {
     if (!selOrder.length) return
@@ -116,7 +105,137 @@ export default function BatchCollect() {
     }
   }
 
+  // --- Route order mode ---
+
+  const enterRouteMode = () => {
+    setRouteLoans([...allLoans])
+    setOrderDirty(false)
+    setRouteMode(true)
+  }
+
+  const cancelRouteMode = () => {
+    setRouteMode(false)
+    setOrderDirty(false)
+  }
+
+  const moveUp = (idx) => {
+    if (idx === 0) return
+    const arr = [...routeLoans]
+    ;[arr[idx - 1], arr[idx]] = [arr[idx], arr[idx - 1]]
+    setRouteLoans(arr)
+    setOrderDirty(true)
+  }
+
+  const moveDown = (idx) => {
+    if (idx === routeLoans.length - 1) return
+    const arr = [...routeLoans]
+    ;[arr[idx], arr[idx + 1]] = [arr[idx + 1], arr[idx]]
+    setRouteLoans(arr)
+    setOrderDirty(true)
+  }
+
+  // Drag handlers
+  const onDragStart = (idx) => { dragIdx.current = idx }
+  const onDragEnter = (idx) => {
+    if (dragIdx.current === null || dragIdx.current === idx) return
+    const arr = [...routeLoans]
+    const dragged = arr.splice(dragIdx.current, 1)[0]
+    arr.splice(idx, 0, dragged)
+    dragIdx.current = idx
+    setRouteLoans(arr)
+    setOrderDirty(true)
+  }
+  const onDragEnd = () => { dragIdx.current = null; dragOverIdx.current = null }
+
+  const saveOrder = async () => {
+    setSavingOrder(true)
+    try {
+      const order = routeLoans.map((l, i) => ({ loan_id: l.id, display_order: i }))
+      await reorderLoans(order)
+      setAllLoans([...routeLoans])
+      setRouteMode(false)
+      setOrderDirty(false)
+      setResult({ type: 'success', msg: 'Route order saved. Loans will always appear in this order.' })
+    } catch {
+      setResult({ type: 'danger', msg: 'Failed to save order.' })
+    } finally {
+      setSavingOrder(false)
+    }
+  }
+
   if (loading) return <div className="text-center mt-5"><div className="spinner-border text-primary" /></div>
+
+  // --- Route order mode UI ---
+  if (routeMode) {
+    return (
+      <div className="container py-3" style={{ paddingBottom: 90 }}>
+        <div className="d-flex justify-content-between align-items-center mb-3">
+          <div>
+            <h4 className="mb-0">Edit Route Order</h4>
+            <small className="text-muted">Drag or use arrows to arrange merchants</small>
+          </div>
+          <button className="btn btn-sm btn-outline-secondary" onClick={cancelRouteMode}>Cancel</button>
+        </div>
+
+        {routeLoans.map((loan, idx) => (
+          <div
+            key={loan.id}
+            className="card mb-2 border"
+            draggable
+            onDragStart={() => onDragStart(idx)}
+            onDragEnter={() => onDragEnter(idx)}
+            onDragEnd={onDragEnd}
+            onDragOver={e => e.preventDefault()}
+            style={{ cursor: 'grab', opacity: dragIdx.current === idx ? 0.5 : 1 }}
+          >
+            <div className="card-body py-2 px-3">
+              <div className="d-flex align-items-center gap-2">
+                <span className="text-muted fw-bold" style={{ minWidth: 24, textAlign: 'center' }}>
+                  {idx + 1}
+                </span>
+                <span className="text-muted me-1" style={{ fontSize: '1.2rem', cursor: 'grab' }}>⠿</span>
+                <div className="flex-grow-1">
+                  <div className="fw-bold">{loan.customer_name}</div>
+                  <div className="text-muted small">{loan.customer_phone}</div>
+                </div>
+                <div className="d-flex flex-column gap-1">
+                  <button
+                    className="btn btn-sm btn-outline-secondary py-0"
+                    style={{ lineHeight: 1.2 }}
+                    onClick={() => moveUp(idx)}
+                    disabled={idx === 0}
+                  >▲</button>
+                  <button
+                    className="btn btn-sm btn-outline-secondary py-0"
+                    style={{ lineHeight: 1.2 }}
+                    onClick={() => moveDown(idx)}
+                    disabled={idx === routeLoans.length - 1}
+                  >▼</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        ))}
+
+        <div className="fixed-bottom bg-white border-top shadow-sm px-3 py-2">
+          <div className="container d-flex justify-content-between align-items-center">
+            <span className="text-muted small">{routeLoans.length} loans</span>
+            <button
+              className="btn btn-primary px-4"
+              onClick={saveOrder}
+              disabled={!orderDirty || savingOrder}
+            >
+              {savingOrder ? 'Saving…' : 'Save Route Order'}
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // --- Normal batch collect UI ---
+  const selLoans = selOrder.map(id => allLoans.find(l => l.id === id)).filter(Boolean).filter(matches)
+  const remLoans = allLoans.filter(l => !isSelected(l.id)).filter(matches)
 
   return (
     <div className="container py-3" style={{ paddingBottom: 90 }}>
@@ -125,6 +244,9 @@ export default function BatchCollect() {
           <h4 className="mb-0">Batch Collection</h4>
           <small className="text-muted">{new Date().toDateString()}</small>
         </div>
+        <button className="btn btn-sm btn-outline-primary" onClick={enterRouteMode}>
+          ⠿ Route Order
+        </button>
       </div>
 
       {restored && (
@@ -212,9 +334,9 @@ export default function BatchCollect() {
 }
 
 function LoanCard({ loan, selected, amount, onToggle, onAmountChange, onAmountBlur }) {
-  const daysRemaining = loan.days_remaining
-  const badgeCls = daysRemaining <= 0 ? 'bg-danger' : daysRemaining <= 5 ? 'bg-warning text-dark' : 'bg-secondary'
-  const badgeText = daysRemaining <= 0 ? 'Overdue' : `${daysRemaining}d left`
+  const d = loan.days_remaining
+  const badgeCls = d <= 0 ? 'bg-danger' : d <= 5 ? 'bg-warning text-dark' : 'bg-secondary'
+  const badgeText = d <= 0 ? 'Overdue' : `${d}d left`
 
   return (
     <div className={`card mb-2 border ${selected ? 'border-success' : 'border-light'}`}>
@@ -222,7 +344,7 @@ function LoanCard({ loan, selected, amount, onToggle, onAmountChange, onAmountBl
         <div className="d-flex align-items-center gap-3">
           <div className="flex-shrink-0">
             <input
-              className="form-check-input loan-chk"
+              className="form-check-input"
               type="checkbox"
               checked={selected}
               onChange={onToggle}
