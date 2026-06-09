@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getBatchCollect, submitBatchPayment, reorderLoans } from '../api/agent'
 import { useAuth } from '../context/AuthContext'
@@ -15,7 +15,7 @@ const STORE_KEY = (agentId) => `mf_collect_${agentId}_${new Date().toISOString()
 export default function BatchCollect() {
   const { user } = useAuth()
   const navigate = useNavigate()
-  const storeKey = STORE_KEY(user?.agent_id)
+  const storeKey = useMemo(() => STORE_KEY(user?.agent_id), [user?.agent_id])
 
   const [allLoans, setAllLoans] = useState([])
   const [loading, setLoading] = useState(true)
@@ -25,6 +25,7 @@ export default function BatchCollect() {
   const [result, setResult] = useState(null)
   const [submitting, setSubmitting] = useState(false)
   const [restored, setRestored] = useState(false)
+  const [hydrated, setHydrated] = useState(false)
 
   // Route order mode
   const [routeMode, setRouteMode] = useState(false)
@@ -38,6 +39,9 @@ export default function BatchCollect() {
   )
 
   useEffect(() => {
+    if (!storeKey) return
+
+    setLoading(true)
     getBatchCollect().then(res => {
       const loans = res.data
       setAllLoans(loans)
@@ -54,12 +58,16 @@ export default function BatchCollect() {
           setRestored(true)
         }
       } catch {}
-    }).finally(() => setLoading(false))
-  }, [])
+    }).finally(() => {
+      setHydrated(true)
+      setLoading(false)
+    })
+  }, [storeKey])
 
   useEffect(() => {
+    if (!hydrated || !storeKey) return
     localStorage.setItem(storeKey, JSON.stringify({ selOrder, amounts }))
-  }, [selOrder, amounts])
+  }, [storeKey, selOrder, amounts, hydrated])
 
   const isSelected = (id) => selOrder.includes(id)
   const selectLoan = (id) => { if (!isSelected(id)) setSelOrder(p => [...p, id]) }
